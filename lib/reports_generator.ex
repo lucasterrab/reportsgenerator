@@ -20,6 +20,12 @@ defmodule ReportsGenerator do
     |> Enum.reduce(report_acc(), fn line, report -> sum_values(line, report) end)
   end
 
+  def build_from_many(filenames) do
+    filenames
+    |> Task.async_stream(&build/1)
+    |> Enum.reduce(report_acc(), fn {:ok, result}, report -> sum_reports(report, result) end)
+  end
+
   def fetch_higher_cost(report, option) when option in @options do
     Enum.max_by(report[option], fn {_key, value} -> value end)
   end
@@ -37,10 +43,23 @@ defmodule ReportsGenerator do
     # could also be done using %{reports | "users" => users, "foods" => foods}
   end
 
+  defp sum_reports(%{"foods" => foods1, "users" => users1}, %{"foods" => foods2, "users" => users2}) do
+    foods = merge_maps(foods1, foods2)
+    users = merge_maps(users1, users2)
+
+    build_report(foods, users)
+  end
+
+  defp merge_maps(map1, map2) do
+    Map.merge(map1, map2, fn _key, value1, value2 -> value1 + value2 end)
+  end
+
   defp report_acc do
     foods = Enum.into(@available_foods, %{}, fn x -> {x, 0} end)
     users = Enum.into(1..30, %{}, fn x -> {Integer.to_string(x), 0} end)
 
-    %{"users" => users, "foods" => foods}
+    build_report(foods, users)
   end
+
+  defp build_report(foods, users), do: %{"foods" => foods, "users" => users}
 end
